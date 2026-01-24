@@ -8,10 +8,17 @@ import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
+import { Server } from "../server"
 
 const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
+const IdeResponse = z
+  .object({
+    url: z.string(),
+    status: z.enum(["started", "running"]),
+  })
+  .meta({ ref: "IdeConnect" })
 
 export const GlobalRoutes = lazy(() =>
   new Hono()
@@ -100,6 +107,41 @@ export const GlobalRoutes = lazy(() =>
               log.info("global event disconnected")
             })
           })
+        })
+      },
+    )
+    .post(
+      "/ide",
+      describeRoute({
+        summary: "Enable IDE integration",
+        description: "Start the local server for IDE extensions and return its URL.",
+        operationId: "global.ide",
+        responses: {
+          200: {
+            description: "IDE connection details",
+            content: {
+              "application/json": {
+                schema: resolver(IdeResponse),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const active = Server.current()
+        if (active) {
+          return c.json({
+            url: active.url.toString(),
+            status: "running",
+          })
+        }
+        const server = Server.listen({
+          hostname: "127.0.0.1",
+          port: 0,
+        })
+        return c.json({
+          url: server.url.toString(),
+          status: "started",
         })
       },
     )

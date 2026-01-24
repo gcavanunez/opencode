@@ -8,7 +8,6 @@ import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
-import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
 
 await Log.init({
@@ -36,8 +35,6 @@ process.on("uncaughtException", (e) => {
 GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)
 })
-
-let server: Bun.Server<BunWebSocketData> | undefined
 
 const eventStream = {
   abort: undefined as AbortController | undefined,
@@ -117,9 +114,10 @@ export const rpc = {
     }
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
-    if (server) await server.stop(true)
-    server = Server.listen(input)
-    return { url: server.url.toString() }
+    const active = Server.current()
+    if (active) await active.stop(true)
+    const next = Server.listen(input)
+    return { url: next.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
@@ -138,7 +136,8 @@ export const rpc = {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
-    if (server) server.stop(true)
+    const active = Server.current()
+    if (active) await active.stop(true)
   },
 }
 

@@ -4,6 +4,8 @@ import { spawn } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
+import path from "path"
+import { Global } from "../global"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },
@@ -12,6 +14,18 @@ const SUPPORTED_IDES = [
   { name: "Cursor" as const, cmd: "cursor" },
   { name: "VSCodium" as const, cmd: "codium" },
 ]
+
+const Connection = z.object({
+  url: z.string(),
+  directory: z.string(),
+  worktree: z.string(),
+  updatedAt: z.string(),
+})
+
+const Store = z.object({
+  version: z.number().optional(),
+  connections: Connection.array().optional(),
+})
 
 export namespace Ide {
   const log = Log.create({ service: "ide" })
@@ -72,5 +86,30 @@ export namespace Ide {
     if (stdout.includes("already installed")) {
       throw new AlreadyInstalledError({})
     }
+  }
+
+  export async function connect(input: { url: string; directory: string; worktree: string }) {
+    const file = Bun.file(path.join(Global.Path.state, "ide.json"))
+    const data = await file.json().catch(() => undefined)
+    const parsed = Store.safeParse(data)
+    const list = parsed.success ? (parsed.data.connections ?? []) : []
+    const updatedAt = new Date().toISOString()
+    const entry = {
+      url: input.url,
+      directory: input.directory,
+      worktree: input.worktree,
+      updatedAt,
+    }
+    const key = entry.worktree === "/" ? entry.directory : entry.worktree
+    const connections = list.filter((item) => {
+      const itemKey = item.worktree === "/" ? item.directory : item.worktree
+      return itemKey !== key
+    })
+    const result = {
+      version: 1,
+      connections: [entry, ...connections],
+    }
+    await Bun.write(file, JSON.stringify(result, null, 2))
+    return entry
   }
 }

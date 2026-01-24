@@ -5,6 +5,7 @@ import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
+import { Ide } from "@/ide"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -496,6 +497,65 @@ function App() {
         dialog.clear()
       },
       category: "System",
+    },
+    {
+      title: "Connect IDE",
+      value: "ide.connect",
+      category: "System",
+      slash: {
+        name: "ide",
+      },
+      onSelect: async (dialog) => {
+        dialog.clear()
+        if (Flag.OPENCODE_SERVER_PASSWORD) {
+          toast.show({
+            variant: "warning",
+            message: "IDE connection is disabled when OPENCODE_SERVER_PASSWORD is set",
+            duration: 5000,
+          })
+          return
+        }
+        const ide = await sdk.client.global.ide().catch(() => undefined)
+        if (!ide?.data) {
+          toast.show({
+            variant: "error",
+            message: "Failed to enable IDE connection",
+            duration: 5000,
+          })
+          return
+        }
+        const info = await sdk.client.path.get().catch(() => undefined)
+        if (!info?.data) {
+          toast.show({
+            variant: "error",
+            message: "Failed to read project path for IDE connection",
+            duration: 5000,
+          })
+          return
+        }
+        const entry = await Ide.connect({
+          url: ide.data.url,
+          directory: info.data.directory,
+          worktree: info.data.worktree,
+        }).catch(() => undefined)
+        if (!entry) {
+          toast.show({
+            variant: "error",
+            message: "Failed to save IDE connection",
+            duration: 5000,
+          })
+          return
+        }
+        const message =
+          ide.data.status === "running"
+            ? `IDE connection ready on ${ide.data.url}`
+            : `IDE server started on ${ide.data.url}`
+        toast.show({
+          variant: "success",
+          message,
+          duration: 5000,
+        })
+      },
     },
     {
       title: "Exit the app",

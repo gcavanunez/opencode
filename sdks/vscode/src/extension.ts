@@ -2,8 +2,23 @@
 export function deactivate() {}
 
 import * as vscode from "vscode"
+import { readFile } from "fs/promises"
+import * as os from "os"
+import * as path from "path"
 
 const TERMINAL_NAME = "opencode"
+
+type IdeConnection = {
+  url: string
+  directory: string
+  worktree: string
+  updatedAt?: string
+}
+
+type FileRef = {
+  ref: string
+  root: string
+}
 
 export function activate(context: vscode.ExtensionContext) {
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
@@ -22,25 +37,119 @@ export function activate(context: vscode.ExtensionContext) {
   })
 
   let addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
-    const fileRef = getActiveFile()
-    if (!fileRef) {
+    const file = getActiveFile()
+    if (!file) {
       return
     }
 
-    const terminal = vscode.window.activeTerminal
-    if (!terminal) {
-      return
-    }
-
-    if (terminal.name === TERMINAL_NAME) {
+    const active = vscode.window.activeTerminal
+    const terminal =
+      active?.name === TERMINAL_NAME ? active : vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
+    if (terminal?.name === TERMINAL_NAME) {
       // @ts-ignore
       const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
-      port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
+      if (port) {
+        const ok = await appendPrompt(portUrl(parseInt(port)), file.ref)
+        if (!ok) terminal.sendText(file.ref, false)
+      }
+      if (!port) terminal.sendText(file.ref, false)
       terminal.show()
+      return
+    }
+
+    const connection = await readConnection(file.root)
+    if (!connection) {
+      vscode.window.showWarningMessage("OpenCode: No IDE connection found. Run /ide in OpenCode or open a terminal.")
+      return
+    }
+    const ok = await appendPrompt(connection.url, file.ref)
+    if (!ok) {
+      vscode.window.showErrorMessage("OpenCode: Failed to send selection. Is OpenCode running?")
     }
   })
 
   context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  const stateRoot = process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state")
+
+  function normalizeUrl(value: string) {
+    if (!value.endsWith("/")) return value
+    return value.slice(0, -1)
+  }
+
+  function portUrl(port: number) {
+    return `http://localhost:${port}`
+  }
+
+  function normalizePath(value: string) {
+    const resolved = path.resolve(value)
+    if (process.platform === "win32") return resolved.toLowerCase()
+    return resolved
+  }
+
+  function connectionRoot(connection: IdeConnection) {
+    if (connection.worktree !== "/") return connection.worktree
+    return connection.directory
+  }
+
+  function matchesRoot(root: string, base: string) {
+    if (root === base) return true
+    return root.startsWith(base + path.sep)
+  }
+
+  function pickLatest(list: IdeConnection[]) {
+    return list.slice().sort((left, right) => {
+      const leftTime = Date.parse(left.updatedAt ?? "")
+      const rightTime = Date.parse(right.updatedAt ?? "")
+      return (rightTime || 0) - (leftTime || 0)
+    })[0]
+  }
+
+  function isConnection(value: unknown): value is IdeConnection {
+    if (!value || typeof value !== "object") return false
+    const item = value as {
+      url?: unknown
+      directory?: unknown
+      worktree?: unknown
+      updatedAt?: unknown
+    }
+    if (typeof item.url !== "string") return false
+    if (typeof item.directory !== "string") return false
+    if (typeof item.worktree !== "string") return false
+    if (item.updatedAt !== undefined && typeof item.updatedAt !== "string") return false
+    return true
+  }
+
+  function parseConnections(data: unknown) {
+    if (!data || typeof data !== "object") return [] as IdeConnection[]
+    const item = data as { connections?: unknown }
+    if (!Array.isArray(item.connections)) return [] as IdeConnection[]
+    return item.connections.filter(isConnection)
+  }
+
+  async function readConnection(root?: string) {
+    const file = path.join(stateRoot, "opencode", "ide.json")
+    const text = await readFile(file, "utf8").catch(() => "")
+    if (!text) return
+    const data = await Promise.resolve()
+      .then(() => JSON.parse(text) as unknown)
+      .catch(() => undefined)
+    if (!data) return
+    const list = parseConnections(data)
+    if (list.length === 0) return
+    if (!root) return pickLatest(list)
+    const base = normalizePath(root)
+    const matches = list.flatMap((connection) => {
+      const entryRoot = connectionRoot(connection)
+      const normalized = normalizePath(entryRoot)
+      if (!matchesRoot(base, normalized)) return []
+      return [{ connection, root: normalized }]
+    })
+    if (matches.length > 0) {
+      const sorted = matches.sort((left, right) => right.root.length - left.root.length)
+      return sorted[0]?.connection
+    }
+    return pickLatest(list)
+  }
 
   async function openTerminal() {
     // Create a new terminal in split screen
@@ -64,8 +173,8 @@ export function activate(context: vscode.ExtensionContext) {
     terminal.show()
     terminal.sendText(`opencode --port ${port}`)
 
-    const fileRef = getActiveFile()
-    if (!fileRef) {
+    const file = getActiveFile()
+    if (!file) {
       return
     }
 
@@ -75,7 +184,7 @@ export function activate(context: vscode.ExtensionContext) {
     do {
       await new Promise((resolve) => setTimeout(resolve, 200))
       try {
-        await fetch(`http://localhost:${port}/app`)
+        await fetch(`${portUrl(port)}/app`)
         connected = true
         break
       } catch (e) {}
@@ -85,22 +194,25 @@ export function activate(context: vscode.ExtensionContext) {
 
     // If connected, append the prompt to the terminal
     if (connected) {
-      await appendPrompt(port, `In ${fileRef}`)
+      await appendPrompt(portUrl(port), `In ${file.ref}`)
       terminal.show()
     }
   }
 
-  async function appendPrompt(port: number, text: string) {
-    await fetch(`http://localhost:${port}/tui/append-prompt`, {
+  async function appendPrompt(url: string, text: string) {
+    const target = `${normalizeUrl(url)}/tui/append-prompt`
+    const response = await fetch(target, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text }),
-    })
+    }).catch(() => undefined)
+    if (!response || !response.ok) return false
+    return true
   }
 
-  function getActiveFile() {
+  function getActiveFile(): FileRef | undefined {
     const activeEditor = vscode.window.activeTextEditor
     if (!activeEditor) {
       return
@@ -113,6 +225,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Get the relative path from workspace root
+    const root = workspaceFolder.uri.fsPath
     const relativePath = vscode.workspace.asRelativePath(document.uri)
     let filepathWithAt = `@${relativePath}`
 
@@ -132,6 +245,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
 
-    return filepathWithAt
+    return { ref: filepathWithAt, root }
   }
 }

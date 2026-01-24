@@ -35,6 +35,7 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalIdeResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -234,6 +235,18 @@ export class Global extends HeyApiClient {
   public event<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<GlobalEventResponses, unknown, ThrowOnError>({
       url: "/global/event",
+      ...options,
+    })
+  }
+
+  /**
+   * Enable IDE integration
+   *
+   * Start the local server for IDE extensions and return its URL.
+   */
+  public ide<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<GlobalIdeResponses, unknown, ThrowOnError>({
+      url: "/global/ide",
       ...options,
     })
   }

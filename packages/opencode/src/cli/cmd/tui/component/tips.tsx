@@ -58,6 +58,7 @@ const TIPS = [
   "Drag and drop images into the terminal to add them as context",
   "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
+  "Run {highlight}/ide{/highlight} to connect your IDE extension for quick file sharing",
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
   "Run {highlight}/models{/highlight} or {highlight}Ctrl+X M{/highlight} to see and switch between available AI models",
   themeTip,

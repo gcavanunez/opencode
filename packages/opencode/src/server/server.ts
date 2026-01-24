@@ -49,9 +49,16 @@ export namespace Server {
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+  const state = {
+    server: undefined as Bun.Server | undefined,
+  }
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
+  }
+
+  export function current() {
+    return state.server
   }
 
   const app = new Hono()
@@ -550,6 +557,7 @@ export namespace Server {
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
+    state.server = server
 
     const shouldPublishMDNS =
       opts.mdns &&
@@ -565,6 +573,10 @@ export namespace Server {
 
     const originalStop = server.stop.bind(server)
     server.stop = async (closeActiveConnections?: boolean) => {
+      if (state.server === server) {
+        state.server = undefined
+      }
+      _url = undefined
       if (shouldPublishMDNS) MDNS.unpublish()
       return originalStop(closeActiveConnections)
     }

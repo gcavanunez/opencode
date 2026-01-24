@@ -881,6 +881,13 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventIdeInstalled = {
+  type: "ide.installed"
+  properties: {
+    ide: string
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -924,10 +931,16 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventIdeInstalled
 
 export type GlobalEvent = {
   directory: string
   payload: Event
+}
+
+export type IdeConnect = {
+  url: string
+  status: "started" | "running"
 }
 
 export type BadRequestError = {
@@ -2198,6 +2211,22 @@ export type GlobalEventResponses = {
 }
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
+
+export type GlobalIdeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/ide"
+}
+
+export type GlobalIdeResponses = {
+  /**
+   * IDE connection details
+   */
+  200: IdeConnect
+}
+
+export type GlobalIdeResponse = GlobalIdeResponses[keyof GlobalIdeResponses]
 
 export type GlobalDisposeData = {
   body?: never
