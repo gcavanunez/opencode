@@ -33,7 +33,7 @@ import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
-import { websocket } from "hono/bun"
+import { websocket, type BunWebSocketData } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
@@ -50,7 +50,7 @@ export namespace Server {
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
   const state = {
-    server: undefined as Bun.Server | undefined,
+    server: undefined as Bun.Server<BunWebSocketData> | undefined,
   }
 
   export function url(): URL {
