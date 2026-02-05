@@ -102,6 +102,30 @@ export const TuiRoutes = lazy(() =>
       },
     )
     .post(
+      "/attach-file",
+      describeRoute({
+        summary: "Attach file to prompt",
+        description: "Attach a file to the TUI prompt as a context reference",
+        operationId: "tui.attachFile",
+        responses: {
+          200: {
+            description: "File attached successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", TuiEvent.FileAttach.properties),
+      async (c) => {
+        await Bus.publish(TuiEvent.FileAttach, c.req.valid("json"))
+        return c.json(true)
+      },
+    )
+    .post(
       "/open-help",
       describeRoute({
         summary: "Open help dialog",

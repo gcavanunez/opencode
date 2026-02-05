@@ -18,6 +18,7 @@ type IdeConnection = {
 type FileRef = {
   ref: string
   root: string
+  absolutePath: string
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -37,19 +38,23 @@ export function activate(context: vscode.ExtensionContext) {
   })
 
   let addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
+    console.log("[opencode] addFilepathToTerminal triggered")
     const file = getActiveFile()
+    console.log("[opencode] file:", file)
     if (!file) {
+      console.log("[opencode] no file, returning")
       return
     }
 
     const active = vscode.window.activeTerminal
     const terminal =
       active?.name === TERMINAL_NAME ? active : vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
+    console.log("[opencode] terminal:", terminal?.name)
     if (terminal?.name === TERMINAL_NAME) {
       // @ts-ignore
       const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
       if (port) {
-        const ok = await appendPrompt(portUrl(parseInt(port)), file.ref)
+        const ok = await attachFile(portUrl(parseInt(port)), file.absolutePath)
         if (!ok) terminal.sendText(file.ref, false)
       }
       if (!port) terminal.sendText(file.ref, false)
@@ -57,12 +62,16 @@ export function activate(context: vscode.ExtensionContext) {
       return
     }
 
+    console.log("[opencode] reading connection for root:", file.root)
     const connection = await readConnection(file.root)
+    console.log("[opencode] connection:", connection)
     if (!connection) {
       vscode.window.showWarningMessage("OpenCode: No IDE connection found. Run /ide in OpenCode or open a terminal.")
       return
     }
-    const ok = await appendPrompt(connection.url, file.ref)
+    console.log("[opencode] calling attachFile with url:", connection.url, "path:", file.absolutePath)
+    const ok = await attachFile(connection.url, file.absolutePath)
+    console.log("[opencode] attachFile result:", ok)
     if (!ok) {
       vscode.window.showErrorMessage("OpenCode: Failed to send selection. Is OpenCode running?")
     }
@@ -192,9 +201,9 @@ export function activate(context: vscode.ExtensionContext) {
       tries--
     } while (tries > 0)
 
-    // If connected, append the prompt to the terminal
+    // If connected, attach the file to the terminal
     if (connected) {
-      await appendPrompt(portUrl(port), `In ${file.ref}`)
+      await attachFile(portUrl(port), file.absolutePath)
       terminal.show()
     }
   }
@@ -207,6 +216,19 @@ export function activate(context: vscode.ExtensionContext) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text }),
+    }).catch(() => undefined)
+    if (!response || !response.ok) return false
+    return true
+  }
+
+  async function attachFile(url: string, filePath: string) {
+    const target = `${normalizeUrl(url)}/tui/attach-file`
+    const response = await fetch(target, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path: filePath }),
     }).catch(() => undefined)
     if (!response || !response.ok) return false
     return true
@@ -226,6 +248,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Get the relative path from workspace root
     const root = workspaceFolder.uri.fsPath
+    const absolutePath = document.uri.fsPath
     const relativePath = vscode.workspace.asRelativePath(document.uri)
     let filepathWithAt = `@${relativePath}`
 
@@ -245,6 +268,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
 
-    return { ref: filepathWithAt, root }
+    return { ref: filepathWithAt, root, absolutePath }
   }
 }

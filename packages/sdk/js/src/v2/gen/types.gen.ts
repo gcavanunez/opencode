@@ -669,6 +669,13 @@ export type EventTuiPromptAppend = {
   }
 }
 
+export type EventTuiFileAttach = {
+  type: "tui.file.attach"
+  properties: {
+    path: string
+  }
+}
+
 export type EventTuiCommandExecute = {
   type: "tui.command.execute"
   properties: {
@@ -913,6 +920,7 @@ export type Event =
   | EventTodoUpdated
   | EventFileWatcherUpdated
   | EventTuiPromptAppend
+  | EventTuiFileAttach
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
@@ -4437,6 +4445,35 @@ export type TuiAppendPromptResponses = {
 
 export type TuiAppendPromptResponse = TuiAppendPromptResponses[keyof TuiAppendPromptResponses]
 
+export type TuiAttachFileData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/attach-file"
+}
+
+export type TuiAttachFileErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiAttachFileError = TuiAttachFileErrors[keyof TuiAttachFileErrors]
+
+export type TuiAttachFileResponses = {
+  /**
+   * File attached successfully
+   */
+  200: boolean
+}
+
+export type TuiAttachFileResponse = TuiAttachFileResponses[keyof TuiAttachFileResponses]
+
 export type TuiOpenHelpData = {
   body?: never
   path?: never
@@ -4601,7 +4638,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: EventTuiPromptAppend | EventTuiFileAttach | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
   path?: never
   query?: {
     directory?: string

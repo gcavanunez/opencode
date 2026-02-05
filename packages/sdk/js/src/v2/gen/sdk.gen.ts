@@ -19,6 +19,7 @@ import type {
   ConfigUpdateResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
+  EventTuiFileAttach,
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
@@ -143,6 +144,8 @@ import type {
   ToolListResponses,
   TuiAppendPromptErrors,
   TuiAppendPromptResponses,
+  TuiAttachFileErrors,
+  TuiAttachFileResponses,
   TuiClearPromptResponses,
   TuiControlNextResponses,
   TuiControlResponseResponses,
@@ -2582,6 +2585,41 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Attach file to prompt
+   *
+   * Attach a file to the TUI prompt as a context reference
+   */
+  public attachFile<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TuiAttachFileResponses, TuiAttachFileErrors, ThrowOnError>({
+      url: "/tui/attach-file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Open help dialog
    *
    * Open the help dialog in the TUI to display user assistance information.
@@ -2779,7 +2817,12 @@ export class Tui extends HeyApiClient {
   public publish<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+      body?:
+        | EventTuiPromptAppend
+        | EventTuiFileAttach
+        | EventTuiCommandExecute
+        | EventTuiToastShow
+        | EventTuiSessionSelect
     },
     options?: Options<never, ThrowOnError>,
   ) {

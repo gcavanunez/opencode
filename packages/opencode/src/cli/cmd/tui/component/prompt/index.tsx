@@ -101,6 +101,56 @@ export function Prompt(props: PromptProps) {
     }, 0)
   })
 
+  sdk.event.on(TuiEvent.FileAttach.type, (evt) => {
+    const filePath = evt.properties.path
+    const filename = filePath.split("/").pop() ?? filePath
+    const url = `file://${filePath}`
+    const virtualText = "@" + filename
+    const extmarkStart = input.visualCursor.offset
+    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
+    const textToInsert = virtualText + " "
+
+    input.insertText(textToInsert)
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: fileStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
+      type: "file",
+      mime: "text/plain",
+      filename,
+      url,
+      source: {
+        type: "file",
+        path: filePath,
+        text: {
+          start: extmarkStart,
+          end: extmarkEnd,
+          value: virtualText,
+        },
+      },
+    }
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push(part)
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+
+    setTimeout(() => {
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
+  })
+
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
     if (!props.disabled) input.cursorColor = theme.text
